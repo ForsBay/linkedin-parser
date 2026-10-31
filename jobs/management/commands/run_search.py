@@ -46,25 +46,37 @@ class Command(BaseCommand):
         else:
             locations = linkedin.get_search_locations(query.country)
 
+        failed = []
         for location in locations:
-            start = 0
-            new_count = 0
-            while True:
-                cards = linkedin.search_jobs(query.keywords, location, start)
-                if not cards:
-                    break
+            try:
+                self.search_location(query, location, options)
+            except linkedin.LinkedInError as e:
+                # сбой одной локации не останавливает остальные
+                self.stdout.write(self.style.ERROR(f'{location}: {e}'))
+                failed.append(location)
 
-                for card in cards:
-                    if self.save_job(card, query):
-                        new_count += 1
+        if failed:
+            raise linkedin.LinkedInError('не загрузились локации: ' + ', '.join(failed))
 
-                start += linkedin.PAGE_SIZE
-                if start >= 1000:
-                    # дальше LinkedIn все равно отдает 400
-                    break
-                time.sleep(options['delay'] + random.random())
+    def search_location(self, query, location, options):
+        start = 0
+        new_count = 0
+        while True:
+            cards = linkedin.search_jobs(query.keywords, location, start)
+            if not cards:
+                break
 
-            self.stdout.write(f'{location}: просмотрено {start}, новых {new_count}')
+            for card in cards:
+                if self.save_job(card, query):
+                    new_count += 1
+
+            start += linkedin.PAGE_SIZE
+            if start >= 1000:
+                # дальше LinkedIn все равно отдает 400
+                break
+            time.sleep(options['delay'] + random.random())
+
+        self.stdout.write(f'{location}: просмотрено {start}, новых {new_count}')
 
     def save_job(self, card, query):
         posted_date = None
